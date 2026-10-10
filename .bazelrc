@@ -1,0 +1,4 @@
+build:release -c opt
+build:release --strip=always
+common --enable_bzlmod
+test --test_output=errors

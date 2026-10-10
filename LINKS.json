@@ -1,0 +1,23 @@
+{
+  "/address-comments": "https://github.com/trycopilotai/address-comments",
+  "/agent-usage": "https://github.com/trycopilotai/agent-usage",
+  "/auto-lint-pr": "https://github.com/trycopilotai/auto-lint-pr",
+  "/extended-adversarial-code-review": "https://github.com/trycopilotai/extended-adversarial-code-review",
+  "/gitchat": "https://github.com/trycopilotai/gitchat",
+  "/handoff": "https://github.com/trycopilotai/handoff",
+  "/htmlify": "https://github.com/trycopilotai/htmlify",
+  "/improve-coverage": "https://github.com/trycopilotai/improve-coverage",
+  "/lint": "https://github.com/trycopilotai/lint",
+  "/m2": "https://github.com/trycopilotai/m2",
+  "/multi-persona-code-review": "https://github.com/trycopilotai/multi-persona-code-review",
+  "/multi-swe-day": "https://github.com/trycopilotai/multi-swe-day",
+  "/plan-commits": "https://github.com/trycopilotai/plan-commits",
+  "/replx": "https://github.com/trycopilotai/replx",
+  "/review-watch": "https://github.com/trycopilotai/review-watch",
+  "/skills": "https://github.com/trycopilotai/skills",
+  "/swe-day": "https://github.com/trycopilotai/swe-day",
+  "/swe-it": "https://github.com/trycopilotai/swe-it",
+  "/tryc.ai": "https://github.com/trycopilotai/tryc.ai",
+  "/what-next": "https://github.com/trycopilotai/what-next",
+  "/x": "https://www.npmjs.com/package/@tryc.ai/x"
+}

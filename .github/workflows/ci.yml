@@ -1,0 +1,83 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - uses: trycopilotai/lint@3c4322bf89aedcd1c5ce5b8cc37c24be63dd09c1 # v0.1.8
+        with:
+          mode: read-only
+          cwd: .
+          docker: "true"
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - run: make test
+
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - name: Build image
+        run: make image
+      - name: Start container
+        run: |
+          docker run -d --name tryc-ci --read-only --cap-drop=ALL -p 8080:8080 tryc.ai:dev
+          for i in $(seq 1 60); do
+            if curl -fsS -o /dev/null http://127.0.0.1:8080/healthz; then
+              break
+            fi
+            sleep 1
+          done
+      - name: Check probes
+        run: |
+          set -euo pipefail
+          check() {
+            local want="$1"; shift
+            local got
+            got="$(curl -s -o /dev/null -w '%{http_code} %{redirect_url}' "$@")"
+            echo "want=[${want}] got=[${got}]"
+            [ "${got}" = "${want}" ]
+          }
+          check "200 " http://127.0.0.1:8080/health/
+          check "301 https://trycopilot.ai/" -H 'Host: tryc.ai' http://127.0.0.1:8080/
+          check "301 https://scribe.trycopilot.ai/x?a=1" -H 'Host: scribe.tryc.ai' 'http://127.0.0.1:8080/x?a=1'
+          check "302 https://www.npmjs.com/package/@tryc.ai/x" -H 'Host: tryc.ai' http://127.0.0.1:8080/x
+          check "302 https://github.com/trycopilotai/lint" -H 'Host: www.tryc.ai' http://127.0.0.1:8080/lint
+      - name: Check health status
+        run: |
+          for i in $(seq 1 90); do
+            status="$(docker inspect -f '{{.State.Health.Status}}' tryc-ci)"
+            if [ "${status}" = healthy ]; then
+              echo "healthy"
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs tryc-ci || true
+          echo "container status: ${status}" >&2
+          exit 1
+      - name: Stop container
+        if: always()
+        run: docker rm -f tryc-ci || true

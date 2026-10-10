@@ -1,0 +1,78 @@
+{
+  "probes": [
+    {
+      "description": "Health endpoint answers without a Host header",
+      "request": {
+        "method": "GET",
+        "url": "/health/"
+      },
+      "expected_response": {
+        "status": 200
+      }
+    },
+    {
+      "description": "Apex root redirects to trycopilot.ai",
+      "request": {
+        "method": "GET",
+        "url": "/",
+        "headers": {
+          "Host": "tryc.ai"
+        }
+      },
+      "expected_response": {
+        "status": 301,
+        "header_equals": {
+          "Location": "https://trycopilot.ai/"
+        }
+      }
+    },
+    {
+      "description": "Subdomain path and query keep their label and query",
+      "request": {
+        "method": "GET",
+        "url": "/x?a=1",
+        "headers": {
+          "Host": "scribe.tryc.ai"
+        }
+      },
+      "expected_response": {
+        "status": 301,
+        "header_equals": {
+          "Location": "https://scribe.trycopilot.ai/x?a=1"
+        }
+      }
+    },
+    {
+      "description": "Mapped npm link on the apex redirects with 302",
+      "request": {
+        "method": "GET",
+        "url": "/x",
+        "headers": {
+          "Host": "tryc.ai"
+        }
+      },
+      "expected_response": {
+        "status": 302,
+        "header_equals": {
+          "Location": "https://www.npmjs.com/package/@tryc.ai/x"
+        }
+      }
+    },
+    {
+      "description": "Mapped repo link on www redirects with 302",
+      "request": {
+        "method": "GET",
+        "url": "/lint",
+        "headers": {
+          "Host": "www.tryc.ai"
+        }
+      },
+      "expected_response": {
+        "status": 302,
+        "header_equals": {
+          "Location": "https://github.com/trycopilotai/lint"
+        }
+      }
+    }
+  ]
+}

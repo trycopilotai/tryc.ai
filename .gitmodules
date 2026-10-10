@@ -1,0 +1,3 @@
+[submodule "github.com/trycopilotai/lint"]
+	path = github.com/trycopilotai/lint
+	url = https://github.com/trycopilotai/lint.git
