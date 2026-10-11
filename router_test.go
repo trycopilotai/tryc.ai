@@ -158,9 +158,9 @@ func TestRoutes(t *testing.T) {
 		{name: "punycode label is kept", method: "GET", target: "/x", host: "xn--tda.tryc.ai", wantStatus: 301, wantLocation: "https://xn--tda.trycopilot.ai/x", wantType: movedType, wantBody: moved},
 		{name: "uppercase subdomain and dot and port", method: "GET", target: "/x", host: "Scribe.TRYC.AI.:443", wantStatus: 301, wantLocation: "https://scribe.trycopilot.ai/x", wantType: movedType, wantBody: moved},
 		{name: "very long label falls back", method: "GET", target: "/x", host: strings.Repeat("a", 70000) + "_.tryc.ai", wantStatus: 301, wantLocation: "https://trycopilot.ai/x", wantType: movedType, wantBody: moved},
-		{name: "valid label over the DNS limit falls back", method: "GET", target: "/x", host: strings.Repeat("a", 240) + ".tryc.ai", wantStatus: 301, wantLocation: "https://trycopilot.ai/x", wantType: movedType, wantBody: moved},
-		{name: "valid label at the DNS limit is kept", method: "GET", target: "/x", host: strings.Repeat("a", 239) + ".tryc.ai", wantStatus: 301, wantLocation: "https://" + strings.Repeat("a", 239) + ".trycopilot.ai/x", wantType: movedType, wantBody: moved},
-		{name: "reflected label over the DNS limit falls back", method: "GET", target: "/x", host: strings.Repeat("a", 60000) + ".tryc.ai", wantStatus: 301, wantLocation: "https://trycopilot.ai/x", wantType: movedType, wantBody: moved},
+		{name: "valid label over the destination host limit falls back", method: "GET", target: "/x", host: strings.Repeat("a", 240) + ".tryc.ai", wantStatus: 301, wantLocation: "https://trycopilot.ai/x", wantType: movedType, wantBody: moved},
+		{name: "valid label at the destination host limit is kept", method: "GET", target: "/x", host: strings.Repeat("a", 239) + ".tryc.ai", wantStatus: 301, wantLocation: "https://" + strings.Repeat("a", 239) + ".trycopilot.ai/x", wantType: movedType, wantBody: moved},
+		{name: "reflected label over the destination host limit falls back", method: "GET", target: "/x", host: strings.Repeat("a", 60000) + ".tryc.ai", wantStatus: 301, wantLocation: "https://trycopilot.ai/x", wantType: movedType, wantBody: moved},
 		{name: "link host with userinfo is not a link host", method: "GET", target: "/lint", host: "a@tryc.ai", wantStatus: 301, wantLocation: "https://trycopilot.ai/lint", wantType: movedType, wantBody: moved},
 	}
 	for _, tc := range cases {
@@ -171,12 +171,13 @@ func TestRoutes(t *testing.T) {
 }
 
 func TestQueryNotAppendedWhenTargetHasQuery(t *testing.T) {
-	links := map[string]string{"/q": "https://example.com/p?fixed=1"}
-	h := newRouter(links, parseLinkHosts(defaultLinkHosts))
-	checkRoute(t, h, routeCase{
-		name: "target query wins", method: "GET", target: "/q?a=1", host: "tryc.ai",
-		wantStatus: 302, wantLocation: "https://example.com/p?fixed=1",
-	})
+	for _, target := range []string{"https://example.com/p?fixed=1", "https://example.com/p?"} {
+		h := newRouter(map[string]string{"/q": target}, parseLinkHosts(defaultLinkHosts))
+		checkRoute(t, h, routeCase{
+			name: "target query wins", method: "GET", target: "/q?a=1", host: "tryc.ai",
+			wantStatus: 302, wantLocation: target,
+		})
+	}
 }
 
 func TestRawQueryIsNotReencoded(t *testing.T) {
@@ -288,58 +289,194 @@ func TestHeadMatchesGet(t *testing.T) {
 	}
 }
 
-// TestRawRequests sends malformed request lines through a real
-// http.Server so net/http's own parsing is part of the check.
+// startServer serves the router through the production http.Server
+// settings from newServer, so net/http's own request parsing, the
+// disabled "OPTIONS *" handler, and MaxHeaderBytes are all in play.
+func startServer(t *testing.T, h http.Handler) *httptest.Server {
+	t.Helper()
+	srv := httptest.NewUnstartedServer(h)
+	srv.Config = newServer(srv.Listener.Addr().String(), h)
+	srv.Start()
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+// rawResponse writes one raw request to the server and returns the
+// status line, the response headers, and the body.
+func rawResponse(t *testing.T, srv *httptest.Server, raw string) (string, map[string]string, string) {
+	t.Helper()
+	conn, err := net.Dial("tcp", srv.Listener.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	_ = conn.SetDeadline(time.Now().Add(5 * time.Second))
+	if _, err := io.WriteString(conn, raw); err != nil {
+		t.Fatal(err)
+	}
+	resp, err := io.ReadAll(conn)
+	if err != nil && len(resp) == 0 {
+		t.Fatal(err)
+	}
+	head, body, _ := strings.Cut(string(resp), "\r\n\r\n")
+	lines := strings.Split(head, "\r\n")
+	headers := make(map[string]string)
+	for _, line := range lines[1:] {
+		if k, v, ok := strings.Cut(line, ": "); ok {
+			headers[k] = v
+		}
+	}
+	return lines[0], headers, body
+}
+
+// TestRawRequests sends raw request lines through the production
+// server settings so net/http's own parsing is part of the check.
 func TestRawRequests(t *testing.T) {
-	srv := httptest.NewServer(testRouter(t))
-	defer srv.Close()
+	srv := startServer(t, testRouter(t))
+	bigHeader := "X: " + strings.Repeat("a", 70000) + "\r\n"
 	cases := []struct {
-		name, raw, wantStatus, wantLocation string
+		name, raw, wantStatus, wantLocation, wantAllow string
 	}{
-		{"control byte in path", "GET /a\x01b HTTP/1.1\r\nHost: tryc.ai\r\n\r\n", "400", ""},
-		{"bad percent escape", "GET /x%zz HTTP/1.1\r\nHost: tryc.ai\r\n\r\n", "400", ""},
-		{"space in host", "GET /x HTTP/1.1\r\nHost: a b.tryc.ai\r\n\r\n", "400", ""},
-		{"extra header is ignored", "GET /nope HTTP/1.1\r\nHost: tryc.ai\r\nX: y\r\n\r\n", "301", "https://trycopilot.ai/nope"},
-		{"asterisk form", "GET * HTTP/1.1\r\nHost: tryc.ai\r\n\r\n", "301", "https://trycopilot.ai/"},
-		{"absolute form", "GET http://evil.com/x HTTP/1.1\r\nHost: tryc.ai\r\n\r\n", "301", "https://trycopilot.ai/x"},
-		{"no host header http/1.0", "GET /x HTTP/1.0\r\n\r\n", "301", "https://trycopilot.ai/x"},
-		{"backslash path", "GET /\\evil.com HTTP/1.1\r\nHost: tryc.ai\r\n\r\n", "301", "https://trycopilot.ai/%5Cevil.com"},
-		{"double slash path", "GET //evil.com HTTP/1.1\r\nHost: tryc.ai\r\n\r\n", "301", "https://trycopilot.ai//evil.com"},
-		// net/http answers server-wide "OPTIONS *" itself with an empty 200
-		// before any handler runs; every other method still reaches the 405.
-		{"OPTIONS asterisk is answered by net/http", "OPTIONS * HTTP/1.1\r\nHost: tryc.ai\r\n\r\n", "200", ""},
-		{"OPTIONS path", "OPTIONS /x HTTP/1.1\r\nHost: tryc.ai\r\n\r\n", "405", ""},
-		{"POST health", "POST /health/ HTTP/1.1\r\nHost: tryc.ai\r\nContent-Length: 0\r\n\r\n", "405", ""},
-		{"CONNECT", "CONNECT tryc.ai:443 HTTP/1.1\r\nHost: tryc.ai\r\n\r\n", "405", ""},
+		// net/http rejects these before the router runs.
+		{"host with userinfo", "GET /x HTTP/1.1\r\nHost: user@tryc.ai\r\n\r\n", "400", "", ""},
+		{"control byte in path", "GET /a\x01b HTTP/1.1\r\nHost: tryc.ai\r\n\r\n", "400", "", ""},
+		{"bad percent escape", "GET /x%zz HTTP/1.1\r\nHost: tryc.ai\r\n\r\n", "400", "", ""},
+		{"space in host", "GET /x HTTP/1.1\r\nHost: a b.tryc.ai\r\n\r\n", "400", "", ""},
+		{"non-ascii host", "GET /x HTTP/1.1\r\nHost: tr\xc3\xbcc.ai\r\n\r\n", "400", "", ""},
+		{"no host header http/1.1", "GET /x HTTP/1.1\r\n\r\n", "400", "", ""},
+		{"health without host header http/1.1", "GET /health/ HTTP/1.1\r\n\r\n", "400", "", ""},
+		{"header over MaxHeaderBytes", "GET /health/ HTTP/1.1\r\nHost: tryc.ai\r\n" + bigHeader + "\r\n", "431", "", ""},
+		{"http/2.0 request line", "GET /health/ HTTP/2.0\r\nHost: tryc.ai\r\n\r\n", "505", "", ""},
+
+		// Accepted by net/http and routed.
+		{"lowercase method", "get /x HTTP/1.1\r\nHost: tryc.ai\r\n\r\n", "405", "", "GET, HEAD"},
+		{"extra header is ignored", "GET /nope HTTP/1.1\r\nHost: tryc.ai\r\nX: y\r\n\r\n", "301", "https://trycopilot.ai/nope", ""},
+		{"asterisk form", "GET * HTTP/1.1\r\nHost: tryc.ai\r\n\r\n", "301", "https://trycopilot.ai/", ""},
+		{"HEAD asterisk form", "HEAD * HTTP/1.1\r\nHost: tryc.ai\r\n\r\n", "301", "https://trycopilot.ai/", ""},
+		{"absolute form", "GET http://evil.com/x HTTP/1.1\r\nHost: tryc.ai\r\n\r\n", "301", "https://trycopilot.ai/x", ""},
+		{"no host header http/1.0", "GET /x HTTP/1.0\r\n\r\n", "301", "https://trycopilot.ai/x", ""},
+		{"health without host header http/1.0", "GET /health/ HTTP/1.0\r\n\r\n", "200", "", ""},
+		{"ipv6 host with port", "GET /x HTTP/1.1\r\nHost: [::1]:8080\r\n\r\n", "301", "https://trycopilot.ai/x", ""},
+		{"backslash path", "GET /\\evil.com HTTP/1.1\r\nHost: tryc.ai\r\n\r\n", "301", "https://trycopilot.ai/%5Cevil.com", ""},
+		{"double slash path", "GET //evil.com HTTP/1.1\r\nHost: tryc.ai\r\n\r\n", "301", "https://trycopilot.ai//evil.com", ""},
+		{"bare question mark is dropped", "GET /nope? HTTP/1.1\r\nHost: tryc.ai\r\n\r\n", "301", "https://trycopilot.ai/nope", ""},
+		{"bare question mark on link is dropped", "GET /lint? HTTP/1.1\r\nHost: tryc.ai\r\n\r\n", "302", "https://github.com/trycopilotai/lint", ""},
+		{"raw query is kept verbatim", "GET /x?a=%20b&c HTTP/1.1\r\nHost: tryc.ai\r\n\r\n", "302", "https://www.npmjs.com/package/@tryc.ai/x?a=%20b&c", ""},
+
+		// Every method other than GET and HEAD is a 405, including the
+		// server-wide "OPTIONS *" that net/http would otherwise answer.
+		{"OPTIONS asterisk", "OPTIONS * HTTP/1.1\r\nHost: tryc.ai\r\n\r\n", "405", "", "GET, HEAD"},
+		{"OPTIONS path", "OPTIONS /x HTTP/1.1\r\nHost: tryc.ai\r\n\r\n", "405", "", "GET, HEAD"},
+		{"POST health", "POST /health/ HTTP/1.1\r\nHost: tryc.ai\r\nContent-Length: 0\r\n\r\n", "405", "", "GET, HEAD"},
+		{"DELETE healthz", "DELETE /healthz HTTP/1.1\r\nHost: tryc.ai\r\n\r\n", "405", "", "GET, HEAD"},
+		{"PUT load", "PUT /load/ HTTP/1.1\r\nHost: tryc.ai\r\nContent-Length: 0\r\n\r\n", "405", "", "GET, HEAD"},
+		{"CONNECT", "CONNECT tryc.ai:443 HTTP/1.1\r\nHost: tryc.ai\r\n\r\n", "405", "", "GET, HEAD"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			conn, err := net.Dial("tcp", srv.Listener.Addr().String())
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer conn.Close()
-			_ = conn.SetDeadline(time.Now().Add(5 * time.Second))
 			raw := strings.TrimSuffix(tc.raw, "\r\n") + "Connection: close\r\n\r\n"
-			if _, err := io.WriteString(conn, raw); err != nil {
-				t.Fatal(err)
+			status, headers, _ := rawResponse(t, srv, raw)
+			if !strings.HasPrefix(status, "HTTP/1.1 "+tc.wantStatus+" ") && !strings.HasPrefix(status, "HTTP/1.0 "+tc.wantStatus+" ") {
+				t.Errorf("status line = %q, want %s", status, tc.wantStatus)
 			}
-			resp, err := io.ReadAll(conn)
-			if err != nil && len(resp) == 0 {
-				t.Fatal(err)
-			}
-			head := strings.SplitN(string(resp), "\r\n\r\n", 2)[0]
-			if !strings.HasPrefix(head, "HTTP/1.1 "+tc.wantStatus+" ") && !strings.HasPrefix(head, "HTTP/1.0 "+tc.wantStatus+" ") {
-				t.Errorf("status line = %q, want %s", strings.SplitN(head, "\r\n", 2)[0], tc.wantStatus)
-			}
-			var got string
-			for _, line := range strings.Split(head, "\r\n") {
-				if v, ok := strings.CutPrefix(line, "Location: "); ok {
-					got = v
-				}
-			}
-			if got != tc.wantLocation {
+			if got := headers["Location"]; got != tc.wantLocation {
 				t.Errorf("Location = %q, want %q", got, tc.wantLocation)
+			}
+			if got := headers["Allow"]; got != tc.wantAllow {
+				t.Errorf("Allow = %q, want %q", got, tc.wantAllow)
+			}
+		})
+	}
+}
+
+// TestHeadMatchesGetOverServer repeats TestHeadMatchesGet through the
+// production server settings. Date is excluded because each request
+// gets its own timestamp; all other response headers are compared.
+func TestHeadMatchesGetOverServer(t *testing.T) {
+	srv := startServer(t, testRouter(t))
+	for _, tc := range []struct{ target, host string }{
+		{"/health/", "tryc.ai"},
+		{"/healthz", "anything.example"},
+		{"/load/", "tryc.ai"},
+		{"/lint", "www.tryc.ai"},
+		{"/x?a=1", "tryc.ai"},
+		{"/nope?a=1", "scribe.tryc.ai"},
+		{"*", "tryc.ai"},
+	} {
+		req := " " + tc.target + " HTTP/1.1\r\nHost: " + tc.host + "\r\nConnection: close\r\n\r\n"
+		getStatus, getHeaders, getBody := rawResponse(t, srv, "GET"+req)
+		headStatus, headHeaders, headBody := rawResponse(t, srv, "HEAD"+req)
+		if getStatus != headStatus {
+			t.Errorf("%s: status GET %q, HEAD %q", tc.target, getStatus, headStatus)
+		}
+		delete(getHeaders, "Date")
+		delete(headHeaders, "Date")
+		if len(getHeaders) != len(headHeaders) {
+			t.Errorf("%s: headers GET %v, HEAD %v", tc.target, getHeaders, headHeaders)
+		}
+		for k, g := range getHeaders {
+			if hd := headHeaders[k]; g != hd {
+				t.Errorf("%s: header %s GET %q, HEAD %q", tc.target, k, g, hd)
+			}
+		}
+		if headBody != "" {
+			t.Errorf("%s: HEAD body = %q", tc.target, headBody)
+		}
+		if cl := getHeaders["Content-Length"]; cl != strconv.Itoa(len(getBody)) {
+			t.Errorf("%s: Content-Length %q, body length %d", tc.target, cl, len(getBody))
+		}
+	}
+}
+
+// TestRunExitCodes checks the exit codes documented in README.md for
+// invalid flags, the health check, and a failed listen.
+func TestRunExitCodes(t *testing.T) {
+	healthy := startServer(t, testRouter(t))
+	_, healthyPort, _ := net.SplitHostPort(healthy.Listener.Addr().String())
+	unhealthy := startServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	_, unhealthyPort, _ := net.SplitHostPort(unhealthy.Listener.Addr().String())
+	// A redirect to a healthy server must not count: only a direct 200 does.
+	redirecting := startServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, healthy.URL+"/healthz", http.StatusFound)
+	}))
+	_, redirectingPort, _ := net.SplitHostPort(redirecting.Listener.Addr().String())
+	closed, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, closedPort, _ := net.SplitHostPort(closed.Addr().String())
+	closed.Close()
+	busy, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer busy.Close()
+	_, busyPort, _ := net.SplitHostPort(busy.Addr().String())
+
+	cases := []struct {
+		name string
+		args []string
+		want int
+	}{
+		{"port zero", []string{"--port=0"}, 2},
+		{"port too large", []string{"--port=65536"}, 2},
+		{"port not a number", []string{"--port=http"}, 2},
+		{"unknown flag", []string{"--nope"}, 2},
+		{"help", []string{"--help"}, 0},
+		{"healthcheck with invalid port", []string{"--healthcheck", "--port=0"}, 2},
+		{"healthcheck 200", []string{"--healthcheck", "--port=" + healthyPort}, 0},
+		{"healthcheck 503", []string{"--healthcheck", "--port=" + unhealthyPort}, 1},
+		{"healthcheck redirect to 200", []string{"--healthcheck", "--port=" + redirectingPort}, 1},
+		{"healthcheck connection refused", []string{"--healthcheck", "--port=" + closedPort}, 1},
+		{"listen on busy port", []string{"--host=127.0.0.1", "--port=" + busyPort}, 1},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var stderr strings.Builder
+			if got := run(tc.args, &stderr); got != tc.want {
+				t.Errorf("run(%q) = %d, want %d; stderr: %s", tc.args, got, tc.want, stderr.String())
 			}
 		})
 	}
@@ -347,20 +484,22 @@ func TestRawRequests(t *testing.T) {
 
 func TestParseLinksRejectsInvalidTables(t *testing.T) {
 	bad := map[string]string{
-		"no leading slash":  `{"x": "https://example.com/"}`,
-		"root key":          `{"/": "https://example.com/"}`,
-		"trailing slash":    `{"/x/": "https://example.com/"}`,
-		"query in key":      `{"/x?y": "https://example.com/"}`,
-		"fragment in key":   `{"/x#y": "https://example.com/"}`,
-		"reserved health":   `{"/health": "https://example.com/"}`,
-		"reserved healthz":  `{"/healthz": "https://example.com/"}`,
-		"reserved load":     `{"/load": "https://example.com/"}`,
-		"http target":       `{"/x": "http://example.com/"}`,
-		"relative target":   `{"/x": "/relative"}`,
-		"no host target":    `{"/x": "https:///path"}`,
-		"javascript target": `{"/x": "javascript:alert(1)"}`,
-		"empty table":       `{}`,
-		"not an object":     `["/x"]`,
+		"no leading slash":      `{"x": "https://example.com/"}`,
+		"root key":              `{"/": "https://example.com/"}`,
+		"trailing slash":        `{"/x/": "https://example.com/"}`,
+		"query in key":          `{"/x?y": "https://example.com/"}`,
+		"fragment in key":       `{"/x#y": "https://example.com/"}`,
+		"reserved health":       `{"/health": "https://example.com/"}`,
+		"reserved healthz":      `{"/healthz": "https://example.com/"}`,
+		"reserved load":         `{"/load": "https://example.com/"}`,
+		"fragment target":       `{"/x": "https://example.com/#part"}`,
+		"empty fragment target": `{"/x": "https://example.com/#"}`,
+		"http target":           `{"/x": "http://example.com/"}`,
+		"relative target":       `{"/x": "/relative"}`,
+		"no host target":        `{"/x": "https:///path"}`,
+		"javascript target":     `{"/x": "javascript:alert(1)"}`,
+		"empty table":           `{}`,
+		"not an object":         `["/x"]`,
 	}
 	for name, doc := range bad {
 		t.Run(name, func(t *testing.T) {

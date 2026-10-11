@@ -26,9 +26,9 @@ const (
 	redirectApex = "https://trycopilot.ai"
 	movedBody    = "Moved permanently to trycopilot.ai.\n"
 
-	// maxHostLen is the DNS limit on a full host name. Longer labels
-	// cannot resolve, so they fall back to the apex instead of being
-	// reflected into the Location header.
+	// maxHostLen bounds the destination host copied into Location.
+	// Longer destination hosts fall back to the apex. This is not a
+	// check of DNS label lengths or whether the destination resolves.
 	maxHostLen = 253
 )
 
@@ -36,8 +36,9 @@ const (
 // Location header. Anything outside it falls back to the apex.
 var labelPattern = regexp.MustCompile(`^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$`)
 
-// reservedPaths are answered by the router itself and cannot be
-// used as LINKS.json keys.
+// reservedPaths cannot be used as LINKS.json keys. The router answers
+// /health/, /healthz, and /load/ itself, and a key never ends in a
+// slash, so these are the keys that would collide with them.
 var reservedPaths = map[string]bool{
 	"/health":  true,
 	"/healthz": true,
@@ -93,6 +94,11 @@ func checkTarget(target string) error {
 	}
 	if u.Scheme != "https" || u.Host == "" {
 		return errors.New("must be an absolute https URL with a host")
+	}
+	// A request query is appended to the target with "?", which would
+	// land inside a fragment, so fragments are not allowed.
+	if strings.Contains(target, "#") {
+		return errors.New("must not contain #")
 	}
 	return nil
 }
@@ -179,8 +185,9 @@ func linkKey(path string) string {
 	return path
 }
 
-// normalizeHost lowercases the Host header, strips any port, and
-// strips one trailing dot.
+// normalizeHost lowercases the Host header, strips the port when the
+// value parses as host:port (including [v6]:port), and then strips
+// one trailing dot.
 func normalizeHost(raw string) string {
 	host := strings.ToLower(raw)
 	if h, _, err := net.SplitHostPort(host); err == nil {
@@ -191,7 +198,8 @@ func normalizeHost(raw string) string {
 
 // redirectBase picks the trycopilot.ai origin for a 301. The apex
 // maps to the apex, and <label>.tryc.ai maps to <label>.trycopilot.ai.
-// Any other host, or a label that fails labelPattern, maps to the
+// Any other host, a label that fails labelPattern, or a label that
+// would make <label>.trycopilot.ai longer than maxHostLen maps to the
 // apex origin.
 func redirectBase(host string) string {
 	if host == apexHost {

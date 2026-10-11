@@ -2,8 +2,8 @@
 #
 # The build stage compiles the static Go binary with Bazel and copies
 # it to a stable path, so the runtime stage never sees Bazel's output
-# tree. The runtime stage carries only /main and runs as a non-root
-# user with a read-only root filesystem in production.
+# tree. The runtime stage adds /main to the pinned Ubuntu base and
+# runs as a non-root user. It supports Docker's --read-only option.
 #
 # Build with: make image
 
@@ -92,8 +92,8 @@ RUN --mount=type=cache,id=tryc-bazelisk,target=/home/tryc/.cache/bazelisk,uid=10
 
 FROM ubuntu-base AS runtime
 
-# A fixed non-root UID that matches the build stage. The image has no
-# login shell and no home directory.
+# A fixed non-root UID that matches the build stage. The account uses
+# nologin and no home directory is created for it.
 RUN groupadd -g 10001 tryc \
     && useradd -u 10001 -g 10001 -M -s /usr/sbin/nologin tryc
 

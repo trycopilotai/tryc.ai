@@ -5,9 +5,11 @@ Thanks for helping with the tryc.ai short-link router.
 ## Add or change a link
 
 Edit `LINKS.json`. Keys start with `/`, have no trailing
-slash, and contain no `?` or `#`. Values are absolute
-`https://` URLs. The binary refuses to start if the file is
-invalid, and the unit tests check the shipped file.
+slash, are not `/`, and contain no `?` or `#`. The keys
+`/health`, `/healthz`, and `/load` are reserved. Values are
+absolute `https://` URLs with a nonempty host and no `#`
+fragment delimiter. The binary refuses to start if the file
+is invalid, and the unit tests check the shipped file.
 
 ## Before you open a pull request
 

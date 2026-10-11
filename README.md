@@ -3,44 +3,54 @@
 The short-link router for tryc.ai, maintained by
 trycopilot.ai. A request for `tryc.ai/<name>` redirects to
 the page for that name, such as an npm package or a GitHub
-repository. Everything else redirects to the matching
-trycopilot.ai address.
+repository. Other GET and HEAD paths, apart from health and
+load endpoints, redirect to the matching trycopilot.ai
+address.
 
 ## How it works
 
-Requests are checked in this order:
+For requests accepted by Go's HTTP parser, the router checks
+these rules in order. Malformed requests may be rejected by
+the server before these rules run:
 
 | Request                                        | Response                                           |
 | ---------------------------------------------- | -------------------------------------------------- |
 | Any method other than GET or HEAD              | `405`, `Allow: GET, HEAD`                          |
-| GET or HEAD `/health/` or `/healthz`, any Host | `200`, body `ok`                                   |
-| GET or HEAD `/load/`, any Host                 | `200`, JSON body `{"load": 0}`                     |
+| GET or HEAD `/health/` or `/healthz`, any Host | `200`, GET body `ok`                               |
+| GET or HEAD `/load/`, any Host                 | `200`, GET JSON body `{"load": 0}`                 |
 | Mapped path on `tryc.ai` or `www.tryc.ai`      | `302` to the target in `LINKS.json`                |
 | Anything else                                  | `301` to trycopilot.ai, keeping the path and query |
 
 A mapped path matches after one trailing slash is removed,
 so `/lint/` and `/lint` both match. If the request has a
-query string and the target has none, the query is appended
-to the target.
+nonempty query string and the target contains no `?`
+delimiter, the query is appended to the target. A bare `?`
+on the request is dropped.
 
 The `301` goes to `trycopilot.ai` for the apex host. A
 subdomain such as `scribe.tryc.ai` goes to the same label on
 trycopilot.ai, such as `scribe.trycopilot.ai`. Other hosts,
 and labels that use characters outside `[a-z0-9.-]` or do
 not start and end with a letter or digit, go to
-`trycopilot.ai`. The Host header is lowercased and loses its
-port and one trailing dot first. The path is copied
-percent-encoded and is not cleaned, so `/./x` stays `/./x`.
-HEAD requests get the same status and headers with no body.
+`trycopilot.ai`. Destination hosts longer than 253 bytes
+also fall back to `trycopilot.ai`. This character rule does
+not validate individual DNS label lengths or resolution. The
+Host header is lowercased, has a port removed when it parses
+as `host:port`, and loses one trailing dot first. The path
+is copied percent-encoded and is not cleaned, so `/./x`
+stays `/./x`. HEAD requests get the corresponding GET status
+and router headers with no body. The server generates Date
+per request.
 
 ## Add a link
 
 Edit `LINKS.json`. Each key is a path that starts with `/`,
-has no trailing slash, and contains no `?` or `#`. The paths
-`/health`, `/healthz`, and `/load` are reserved. Each value
-is an absolute `https://` URL. The program checks the file
-at startup and exits with an error if an entry is invalid.
-The unit tests check the shipped file too.
+is not `/`, has no trailing slash, and contains no `?` or
+`#`. The paths `/health`, `/healthz`, and `/load` are
+reserved. Each value is an absolute `https://` URL with a
+nonempty host and no fragment delimiter (`#`). The program
+checks the file at startup and exits with an error if an
+entry is invalid. The unit tests check the shipped file too.
 
 ## Run
 
@@ -61,8 +71,13 @@ Flags:
   must be 1 to 65535)
 - `--link-hosts` (default `tryc.ai,www.tryc.ai`): hosts that
   serve `LINKS.json` redirects
-- `--healthcheck`: request `/healthz` on `127.0.0.1` and
-  exit 0 on HTTP 200, or 1 otherwise
+- `--healthcheck`: request `/healthz` on `127.0.0.1` at
+  `--port` and exit 0 on HTTP 200, or 1 otherwise; redirects
+  are not followed
+
+Help exits 0. Invalid flags or a port outside the range
+exit 2. Link validation, listen, and healthcheck failures
+exit 1.
 
 ## Develop
 
@@ -95,7 +110,7 @@ local_path_override(module_name = "tryc_ai", path = "path/to/tryc.ai")
 ```
 
 The binary is `@tryc_ai//:main`. It is built with pure and
-static linking, so it runs without a C library.
+static linking. The Linux binary runs without a C library.
 
 ## Security
 
