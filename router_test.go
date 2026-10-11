@@ -130,7 +130,7 @@ func TestRoutes(t *testing.T) {
 		{name: "link with path on non-link host", method: "GET", target: "/x", host: "go.tryc.ai", wantStatus: 301, wantLocation: "https://go.trycopilot.ai/x", wantType: movedType, wantBody: moved},
 
 		// The 301 Location is always https://, an allowlisted
-		// trycopilot.ai host, and a single-slash-rooted path. Path
+		// trycopilot.ai host, and a slash-rooted path. Path
 		// segments are passed through escaped, never cleaned, so a
 		// crafted path cannot become a new authority.
 		{name: "asterisk target maps to root", method: "GET", target: "*", host: "tryc.ai", wantStatus: 301, wantLocation: "https://trycopilot.ai/", wantType: movedType, wantBody: moved},
