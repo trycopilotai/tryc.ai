@@ -538,7 +538,7 @@ type probeFile struct {
 }
 
 // TestProbes replays every PROBES.json case against the handler.
-// The same file is used by the container smoke test in CI.
+// CI separately checks the five shipped cases against the container.
 func TestProbes(t *testing.T) {
 	data, err := os.ReadFile("PROBES.json")
 	if err != nil {

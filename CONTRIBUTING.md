@@ -13,9 +13,11 @@ is invalid, and the unit tests check the shipped file.
 
 ## Before you open a pull request
 
-Run the same checks CI runs:
+Install Node.js, Git, Python 3.11 or newer, and Docker.
+Initialize the pinned lint submodule, then run the checks:
 
 ```sh
+git submodule update --init
 make test
 make lint
 make image

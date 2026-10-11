@@ -96,8 +96,8 @@ The `github.com/trycopilotai/lint` submodule is pinned to
 `refs/tags/v0.1.8` at commit
 `3c4322bf89aedcd1c5ce5b8cc37c24be63dd09c1`.
 
-Bazel is started through Bazelisk with `npx`, so Node.js is
-required. Go is not needed on the host.
+Bazel is started through Bazelisk 1.25.0 with `npx`, so
+Node.js is required. Go is not needed on the host.
 
 ## Use as a Bazel module
 
@@ -114,8 +114,8 @@ static linking. The Linux binary runs without a C library.
 
 ## Security
 
-Report vulnerabilities privately through GitHub private
-vulnerability reporting. See [SECURITY.md](SECURITY.md).
+Report vulnerabilities privately using the reporting paths
+in [SECURITY.md](SECURITY.md).
 
 ## License
 

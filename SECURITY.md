@@ -2,9 +2,11 @@
 
 ## Reporting a vulnerability
 
-Please report security issues privately through GitHub
-private vulnerability reporting on this repository: open the
-Security tab and choose "Report a vulnerability". Do not
+When GitHub private vulnerability reporting is available,
+open the Security tab and choose "Report a vulnerability".
+If that button is unavailable, email the maintainer using
+the address on the
+[public contact page](https://p13i.io/cv/#contact). Do not
 open a public issue for a suspected vulnerability.
 
 ## Supported versions

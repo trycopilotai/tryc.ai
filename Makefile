@@ -1,7 +1,7 @@
 SHELL := /bin/bash
 
 ARGS ?=
-BAZEL := npx --yes @bazel/bazelisk
+BAZEL := npx --yes @bazel/bazelisk@1.25.0
 
 LINT := github.com/trycopilotai/lint/lint.py
 PYTHON ?= python3

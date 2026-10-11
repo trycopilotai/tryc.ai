@@ -1,7 +1,7 @@
 {
   "probes": [
     {
-      "description": "Health endpoint answers without a Host header",
+      "description": "Health endpoint answers on the default request host",
       "request": {
         "method": "GET",
         "url": "/health/"
