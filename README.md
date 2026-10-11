@@ -99,6 +99,9 @@ The `github.com/trycopilotai/lint` submodule is pinned to
 Bazel is started through Bazelisk 1.25.0 with `npx`, so
 Node.js is required. Go is not needed on the host.
 
+Native Bazel builds need a C/C++ toolchain: Xcode Command
+Line Tools on macOS, or build-essential on Debian/Ubuntu.
+
 ## Use as a Bazel module
 
 Add the repository as a module, then depend on the binary
