@@ -1,11 +1,11 @@
 # tryc.ai
 
 The short-link router for tryc.ai, maintained by
-trycopilot.ai. A request for `tryc.ai/<name>` redirects to
-the page for that name, such as an npm package or a GitHub
-repository. Other GET and HEAD paths, apart from health and
-load endpoints, redirect to the matching trycopilot.ai
-address.
+trycopilot.ai LLC. A request for `tryc.ai/<name>` redirects
+to the page for that name, such as an npm package or a
+GitHub repository. Other GET and HEAD paths, apart from
+health and load endpoints, redirect to the matching
+trycopilot.ai address.
 
 ## How it works
 
