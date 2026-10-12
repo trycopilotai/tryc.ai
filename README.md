@@ -122,7 +122,7 @@ in [SECURITY.md](SECURITY.md).
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+MIT license. See [LICENSE](LICENSE).
 
 Not affiliated with, endorsed by, or connected to GitHub,
 Microsoft, or GitHub Copilot.
