@@ -29,5 +29,5 @@ make image
 `make lint ARGS=--write` to apply formatting fixes.
 
 Keep changes small and focused. In prose, name the company
-as `trycopilot.ai`, and name the GitHub organization as
+as `trycopilot.ai LLC`, and name the GitHub organization as
 `trycopilotai`.
