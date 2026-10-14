@@ -1,5 +1,7 @@
 {
   "/address-comments": "https://github.com/trycopilotai/address-comments",
+  "/agent-he": "https://github.com/trycopilotai/agent-heuristic-analysis",
+  "/agent-heuristic-analysis": "https://github.com/trycopilotai/agent-heuristic-analysis",
   "/agent-usage": "https://github.com/trycopilotai/agent-usage",
   "/auto-lint-pr": "https://github.com/trycopilotai/auto-lint-pr",
   "/extended-adversarial-code-review": "https://github.com/trycopilotai/extended-adversarial-code-review",
