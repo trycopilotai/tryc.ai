@@ -71,15 +71,15 @@ func (w workflow) reusableOnly() bool {
 }
 
 // readmeLines returns the README's lines and the line indexes of its
-// title and of its first second-level heading, ignoring fenced code.
-func readmeLines(t *testing.T) (lines []string, title, firstSection int) {
+// title and of its first two --- rules, ignoring fenced code.
+func readmeLines(t *testing.T) (lines []string, title, ruleOne, ruleTwo int) {
 	t.Helper()
 	data, err := os.ReadFile("README.md")
 	if err != nil {
 		t.Fatal(err)
 	}
 	lines = strings.Split(string(data), "\n")
-	title, firstSection = -1, len(lines)
+	title, ruleOne, ruleTwo = -1, -1, -1
 	fence := ""
 	for i, line := range lines {
 		switch {
@@ -87,20 +87,25 @@ func readmeLines(t *testing.T) (lines []string, title, firstSection int) {
 			if strings.HasPrefix(line, fence) {
 				fence = ""
 			}
-		case strings.HasPrefix(line, "```"):
-			fence = "```"
-		case strings.HasPrefix(line, "~~~"):
-			fence = "~~~"
-		case strings.HasPrefix(line, "# ") && title < 0:
-			title = i
-		case strings.HasPrefix(line, "## ") && firstSection == len(lines):
-			firstSection = i
+		case strings.HasPrefix(line, "```") || strings.HasPrefix(line, "~~~"):
+			fence = line[:3]
+		case title < 0:
+			if strings.HasPrefix(line, "# ") || strings.Contains(line, "<h1") {
+				title = i
+			}
+		case strings.TrimSpace(line) == "---" && ruleOne < 0:
+			ruleOne = i
+		case strings.TrimSpace(line) == "---" && ruleTwo < 0:
+			ruleTwo = i
 		}
 	}
 	if title < 0 {
 		t.Fatal("README has no title")
 	}
-	return lines, title, firstSection
+	if ruleTwo < 0 {
+		t.Fatal("README needs two --- rules under the title and subtitle")
+	}
+	return lines, title, ruleOne, ruleTwo
 }
 
 func TestReadmeBadgesMatchWorkflows(t *testing.T) {
@@ -112,7 +117,7 @@ func TestReadmeBadgesMatchWorkflows(t *testing.T) {
 		}
 		paths = append(paths, found...)
 	}
-	lines, title, firstSection := readmeLines(t)
+	lines, _, ruleOne, ruleTwo := readmeLines(t)
 	readme := strings.Join(lines, "\n")
 	runnable := 0
 	for _, path := range paths {
@@ -135,12 +140,40 @@ func TestReadmeBadgesMatchWorkflows(t *testing.T) {
 			t.Errorf("%s: README mentions the badge image %d times, want 1", w.file, n)
 		}
 		for i, line := range lines {
-			if strings.Contains(line, badge) && (i <= title || i >= firstSection) {
-				t.Errorf("%s: badge on line %d is outside lines %d to %d, between the title and the first section", w.file, i+1, title+2, firstSection)
+			if strings.Contains(line, badge) && (i <= ruleOne || i >= ruleTwo) {
+				t.Errorf("%s: badge on line %d is not between the two --- rules", w.file, i+1)
 			}
 		}
 	}
 	if runnable == 0 {
 		t.Fatal("no runnable workflow found; the check would pass without checking anything")
+	}
+}
+
+func TestReadmeHeaderLayout(t *testing.T) {
+	lines, title, ruleOne, ruleTwo := readmeLines(t)
+	for _, rule := range []int{ruleOne, ruleTwo} {
+		if strings.TrimSpace(lines[rule-1]) != "" || strings.TrimSpace(lines[rule+1]) != "" {
+			t.Errorf("line %d: a --- rule needs a blank line above and below it", rule+1)
+		}
+	}
+	blocks := 0
+	previousBlank := true
+	for _, line := range lines[title+1 : ruleOne] {
+		blank := strings.TrimSpace(line) == ""
+		if !blank && previousBlank {
+			blocks++
+		}
+		previousBlank = blank
+	}
+	if blocks != 1 {
+		t.Errorf("the subtitle between the title and the first --- rule must be one paragraph, found %d blocks", blocks)
+	}
+	for _, line := range lines[ruleOne+1 : ruleTwo] {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.Contains(line, "badge.svg") || trimmed == "</div>" || trimmed == `<div align="center">` {
+			continue
+		}
+		t.Errorf("only badges may sit between the --- rules: %.60s", line)
 	}
 }
