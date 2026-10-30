@@ -7,6 +7,10 @@ GitHub repository. Other GET and HEAD paths, apart from
 health and load endpoints, redirect to the matching
 trycopilot.ai address.
 
+[![auto-lint-pr](https://github.com/trycopilotai/tryc.ai/actions/workflows/auto-lint-pr.yml/badge.svg)](https://github.com/trycopilotai/tryc.ai/actions/workflows/auto-lint-pr.yml)
+[![CI](https://github.com/trycopilotai/tryc.ai/actions/workflows/ci.yml/badge.svg)](https://github.com/trycopilotai/tryc.ai/actions/workflows/ci.yml)
+[![lint](https://github.com/trycopilotai/tryc.ai/actions/workflows/lint.yml/badge.svg)](https://github.com/trycopilotai/tryc.ai/actions/workflows/lint.yml)
+
 ## How it works
 
 For requests accepted by Go's HTTP parser, the router checks

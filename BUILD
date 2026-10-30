@@ -32,3 +32,13 @@ go_test(
     data = ["PROBES.json"],
     embed = [":tryc_lib"],
 )
+
+go_test(
+    name = "readme_badges_test",
+    size = "small",
+    srcs = ["readme_badges_test.go"],
+    data = [
+        "README.md",
+    ] + glob([".github/workflows/*.yml"]),
+    embed = [":tryc_lib"],
+)
