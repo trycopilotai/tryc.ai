@@ -1,15 +1,20 @@
 # tryc.ai
 
 The short-link router for tryc.ai, maintained by
-trycopilot.ai LLC. A request for `tryc.ai/<name>` redirects
-to the page for that name, such as an npm package or a
-GitHub repository. Other GET and HEAD paths, apart from
-health and load endpoints, redirect to the matching
-trycopilot.ai address.
+trycopilot.ai LLC.
+
+---
 
 [![auto-lint-pr](https://github.com/trycopilotai/tryc.ai/actions/workflows/auto-lint-pr.yml/badge.svg)](https://github.com/trycopilotai/tryc.ai/actions/workflows/auto-lint-pr.yml)
 [![CI](https://github.com/trycopilotai/tryc.ai/actions/workflows/ci.yml/badge.svg)](https://github.com/trycopilotai/tryc.ai/actions/workflows/ci.yml)
 [![lint](https://github.com/trycopilotai/tryc.ai/actions/workflows/lint.yml/badge.svg)](https://github.com/trycopilotai/tryc.ai/actions/workflows/lint.yml)
+
+---
+
+A request for `tryc.ai/<name>` redirects to the page for
+that name, such as an npm package or a GitHub repository.
+Other GET and HEAD paths, apart from health and load
+endpoints, redirect to the matching trycopilot.ai address.
 
 ## How it works
 
