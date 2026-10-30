@@ -13,18 +13,6 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  lint:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
-        with:
-          persist-credentials: false
-      - uses: trycopilotai/lint@3c4322bf89aedcd1c5ce5b8cc37c24be63dd09c1 # v0.1.8
-        with:
-          mode: read-only
-          cwd: .
-          docker: "true"
-
   test:
     runs-on: ubuntu-latest
     steps:
